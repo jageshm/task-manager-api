@@ -1,349 +1,581 @@
-import { useState } from "react";
-import Sidebar from "../components/Sidebar";
-import EndpointCard from "../components/EndpointCard";
-import DatabaseSchema from "../components/DatabaseSchema";
-import Implementation from "../components/Implementation";
-import ApiTester from "../components/ApiTester";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { 
+  ClipboardList, Menu, Plus, Edit, Trash, Check, X, Calendar, Clock, RefreshCw, 
+  Search, Filter, ArrowDownAZ, ArrowUpZA, Loader2
+} from "lucide-react";
 import { Link } from "wouter";
-import { ClipboardList, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { Task } from "@shared/schema";
 
 export default function Dashboard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState("overview");
+  const [selectedTab, setSelectedTab] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  
+  // Form states
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState("pending");
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
+  // Fetch tasks
+  const { data: tasks = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['/api/tasks'],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/tasks");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to fetch tasks");
+      }
+      return res.json();
+    }
+  });
+
+  // Create task mutation
+  const createMutation = useMutation({
+    mutationFn: async (newTask: { title: string; description: string; status: string }) => {
+      const res = await apiRequest("POST", "/api/tasks", newTask);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to create task");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      setIsCreateModalOpen(false);
+      resetForm();
+      toast({
+        title: "Task created",
+        description: "The task has been created successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create task",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Update task mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, task }: { id: number; task: { title?: string; description?: string; status?: string } }) => {
+      const res = await apiRequest("PUT", `/api/tasks/${id}`, task);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to update task");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      setIsEditModalOpen(false);
+      resetForm();
+      toast({
+        title: "Task updated",
+        description: "The task has been updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update task",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Delete task mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/tasks/${id}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to delete task");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      setIsDeleteModalOpen(false);
+      toast({
+        title: "Task deleted",
+        description: "The task has been deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete task",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Handle creating a task
+  const handleCreateTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    createMutation.mutate({ title, description, status });
+  };
+
+  // Handle updating a task
+  const handleUpdateTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTask) return;
+
+    const updatedTask: { title?: string; description?: string; status?: string } = {};
+    if (title) updatedTask.title = title;
+    if (description) updatedTask.description = description;
+    if (status) updatedTask.status = status;
+
+    updateMutation.mutate({ id: selectedTask.id, task: updatedTask });
+  };
+
+  // Handle deleting a task
+  const handleDeleteTask = () => {
+    if (!selectedTask) return;
+    deleteMutation.mutate(selectedTask.id);
+  };
+
+  // Open edit modal with task data
+  const openEditModal = (task: Task) => {
+    setSelectedTask(task);
+    setTitle(task.title);
+    setDescription(task.description || "");
+    setStatus(task.status || "pending");
+    setIsEditModalOpen(true);
+  };
+
+  // Open delete modal
+  const openDeleteModal = (task: Task) => {
+    setSelectedTask(task);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setStatus("pending");
+    setSelectedTask(null);
+  };
+
+  // Filter tasks based on selected tab and search query
+  const filteredTasks = tasks.filter((task: Task) => {
+    const matchesStatus = selectedTab === "all" || task.status === selectedTab;
+    const matchesSearch = 
+      task.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    return matchesStatus && matchesSearch;
+  });
+
+  // Sort tasks
+  const sortedTasks = [...filteredTasks].sort((a: Task, b: Task) => {
+    if (sortOrder === "asc") {
+      return a.title.localeCompare(b.title);
+    } else {
+      return b.title.localeCompare(a.title);
+    }
+  });
+
+  // Task count by status
+  const taskCounts = tasks.reduce((acc: { [key: string]: number }, task: Task) => {
+    const status = task.status || "pending";
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, { all: tasks.length });
+
+  // Status badge colors
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
+      case "in-progress":
+        return "bg-blue-100 text-blue-800 hover:bg-blue-100";
+      case "completed":
+        return "bg-green-100 text-green-800 hover:bg-green-100";
+      default:
+        return "bg-gray-100 text-gray-800 hover:bg-gray-100";
+    }
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 font-sans">
-      {/* Sidebar - hidden on mobile */}
-      <div className="hidden md:block">
-        <Sidebar activeSection={activeSection} setActiveSection={setActiveSection} />
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 overflow-auto">
-        {/* Mobile header */}
-        <div className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+    <div className="flex flex-col h-screen overflow-hidden bg-gray-50 font-sans">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center">
-            <div className="h-8 w-8 bg-primary rounded-md flex items-center justify-center">
+            <div className="h-8 w-8 bg-primary rounded-md flex items-center justify-center mr-3">
               <ClipboardList className="h-5 w-5 text-white" />
             </div>
-            <h1 className="ml-2 text-xl font-semibold text-gray-800">Task API</h1>
+            <h1 className="text-xl font-semibold text-gray-800">Task Manager</h1>
           </div>
-          <Button variant="ghost" size="sm" onClick={toggleMobileMenu}>
-            <Menu className="h-6 w-6" />
-          </Button>
+          <div className="flex items-center gap-4">
+            <Link href="/docs">
+              <Button variant="outline" size="sm">API Docs</Button>
+            </Link>
+            <Button 
+              onClick={() => setIsCreateModalOpen(true)} 
+              size="sm"
+              className="hidden sm:flex"
+            >
+              <Plus className="mr-1 h-4 w-4" /> New Task
+            </Button>
+            <Button 
+              onClick={() => setIsCreateModalOpen(true)} 
+              variant="default" 
+              size="icon" 
+              className="sm:hidden"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto container mx-auto px-4 py-6">
+        {/* Task Filters and Controls */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="w-full sm:w-auto">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                type="text"
+                placeholder="Search tasks..."
+                className="pl-8 w-full sm:w-64"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-2 items-center w-full sm:w-auto">
+            <Tabs 
+              defaultValue="all" 
+              className="w-full"
+              value={selectedTab}
+              onValueChange={setSelectedTab}
+            >
+              <TabsList className="grid grid-cols-4 w-full">
+                <TabsTrigger value="all">
+                  All
+                  {taskCounts.all > 0 && (
+                    <Badge className="ml-1 bg-gray-200 text-gray-800 hover:bg-gray-200">
+                      {taskCounts.all}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="pending">
+                  Pending
+                  {taskCounts.pending > 0 && (
+                    <Badge className="ml-1 bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+                      {taskCounts.pending}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="in-progress">
+                  In Progress
+                  {taskCounts['in-progress'] > 0 && (
+                    <Badge className="ml-1 bg-blue-100 text-blue-800 hover:bg-blue-100">
+                      {taskCounts['in-progress']}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="completed">
+                  Completed
+                  {taskCounts.completed > 0 && (
+                    <Badge className="ml-1 bg-green-100 text-green-800 hover:bg-green-100">
+                      {taskCounts.completed}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+              title={sortOrder === "asc" ? "Sort Z to A" : "Sort A to Z"}
+            >
+              {sortOrder === "asc" ? <ArrowDownAZ className="h-4 w-4" /> : <ArrowUpZA className="h-4 w-4" />}
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => refetch()}
+              title="Refresh tasks"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        {/* Mobile menu */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden bg-white border-b border-gray-200">
-            <nav className="px-4 py-2 space-y-1">
-              <Link href="#overview">
-                <a 
-                  className={`block px-3 py-2 text-sm font-medium rounded-md ${
-                    activeSection === "overview" 
-                      ? "bg-gray-100 text-gray-900" 
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                  onClick={() => {
-                    setActiveSection("overview");
-                    setIsMobileMenuOpen(false);
-                  }}
+        {/* Task List */}
+        <div className="space-y-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-2 text-gray-500">Loading tasks...</span>
+            </div>
+          ) : isError ? (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-6 text-center">
+                <X className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-red-800 mb-2">Error loading tasks</h3>
+                <p className="text-red-600">{error instanceof Error ? error.message : "Unknown error occurred"}</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4" 
+                  onClick={() => refetch()}
                 >
-                  Overview
-                </a>
-              </Link>
-              <Link href="#endpoints">
-                <a 
-                  className={`block px-3 py-2 text-sm font-medium rounded-md ${
-                    activeSection === "endpoints" 
-                      ? "bg-gray-100 text-gray-900" 
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                  onClick={() => {
-                    setActiveSection("endpoints");
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  API Endpoints
-                </a>
-              </Link>
-              <Link href="#schema">
-                <a 
-                  className={`block px-3 py-2 text-sm font-medium rounded-md ${
-                    activeSection === "schema" 
-                      ? "bg-gray-100 text-gray-900" 
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                  onClick={() => {
-                    setActiveSection("schema");
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  Database Schema
-                </a>
-              </Link>
-              <Link href="#testing">
-                <a 
-                  className={`block px-3 py-2 text-sm font-medium rounded-md ${
-                    activeSection === "testing" 
-                      ? "bg-gray-100 text-gray-900" 
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                  onClick={() => {
-                    setActiveSection("testing");
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  API Testing
-                </a>
-              </Link>
-              <Link href="#implementation">
-                <a 
-                  className={`block px-3 py-2 text-sm font-medium rounded-md ${
-                    activeSection === "implementation" 
-                      ? "bg-gray-100 text-gray-900" 
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                  onClick={() => {
-                    setActiveSection("implementation");
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  Implementation
-                </a>
-              </Link>
-            </nav>
-          </div>
-        )}
-
-        {/* Page content */}
-        <main className="p-6">
-          {/* Overview section */}
-          <section id="overview" className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Task Management API</h2>
-            <div className="bg-white shadow rounded-lg p-6">
-              <div className="mb-6">
-                <div className="flex items-center">
-                  <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mr-4">
-                    <ClipboardList className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900">About this API</h3>
-                </div>
-                <p className="mt-2 text-gray-600">
-                  This is a RESTful API for managing tasks, built with Express.js and connected to a Supabase PostgreSQL database.
-                  The API provides endpoints for creating, reading, updating, and deleting tasks.
+                  <RefreshCw className="mr-2 h-4 w-4" /> Try Again
+                </Button>
+              </CardContent>
+            </Card>
+          ) : sortedTasks.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <ClipboardList className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-800 mb-2">No tasks found</h3>
+                <p className="text-gray-500 mb-4">
+                  {searchQuery
+                    ? `No tasks matching "${searchQuery}"`
+                    : selectedTab !== "all"
+                    ? `No ${selectedTab} tasks found`
+                    : "Create your first task to get started"}
                 </p>
+                <Button onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Create new task
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sortedTasks.map((task: Task) => (
+                <Card key={task.id} className="overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <Badge
+                      className={`self-start mb-2 ${getStatusBadgeColor(task.status || "pending")}`}
+                    >
+                      {task.status || "pending"}
+                    </Badge>
+                    <CardTitle className="text-lg">{task.title}</CardTitle>
+                    <CardDescription className="line-clamp-2 text-sm">
+                      {task.description || "No description provided"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardFooter className="flex justify-between pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => openEditModal(task)}
+                    >
+                      <Edit className="h-4 w-4 mr-1" /> Edit
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => openDeleteModal(task)}
+                    >
+                      <Trash className="h-4 w-4 mr-1" /> Delete
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Create Task Modal */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Task</DialogTitle>
+            <DialogDescription>
+              Add a new task to your task list
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateTask}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Enter task title"
+                  required
+                />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
-                      </svg>
-                    </div>
-                    <h4 className="font-medium text-gray-900">Tech Stack</h4>
-                  </div>
-                  <ul className="mt-2 text-sm text-gray-600 space-y-1">
-                    <li className="flex items-center">
-                      <svg className="h-4 w-4 text-green-600 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Node.js
-                    </li>
-                    <li className="flex items-center">
-                      <svg className="h-4 w-4 text-green-600 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Express.js
-                    </li>
-                    <li className="flex items-center">
-                      <svg className="h-4 w-4 text-green-600 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      Supabase PostgreSQL
-                    </li>
-                    <li className="flex items-center">
-                      <svg className="h-4 w-4 text-green-600 mr-1.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      dotenv
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center mr-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                    <h4 className="font-medium text-gray-900">Endpoints</h4>
-                  </div>
-                  <ul className="mt-2 text-sm text-gray-600 space-y-1">
-                    <li className="flex items-start">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 mr-1.5">POST</span>
-                      /api/tasks
-                    </li>
-                    <li className="flex items-start">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-1.5">GET</span>
-                      /api/tasks
-                    </li>
-                    <li className="flex items-start">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 mr-1.5">PUT</span>
-                      /api/tasks/:id
-                    </li>
-                    <li className="flex items-start">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 mr-1.5">DELETE</span>
-                      /api/tasks/:id
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                      </svg>
-                    </div>
-                    <h4 className="font-medium text-gray-900">Database</h4>
-                  </div>
-                  <div className="mt-2 text-sm text-gray-600">
-                    <p className="mb-1">Supabase PostgreSQL with the following table:</p>
-                    <pre className="bg-gray-100 p-2 rounded text-xs font-mono overflow-x-auto">
-tasks (
-  id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  status TEXT DEFAULT 'pending'
-)
-                    </pre>
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Enter task description"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={status}
+                  onValueChange={setStatus}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Select a status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          </section>
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsCreateModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit"
+                disabled={createMutation.isPending}
+              >
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Task
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-          {/* API Endpoints section */}
-          <section id="endpoints" className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">API Endpoints</h2>
+      {/* Edit Task Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>
+              Update the details of your task
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateTask}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Title</Label>
+                <Input
+                  id="edit-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Enter task title"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea
+                  id="edit-description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Enter task description"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={status}
+                  onValueChange={setStatus}
+                >
+                  <SelectTrigger id="edit-status">
+                    <SelectValue placeholder="Select a status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setIsEditModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit"
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-            <EndpointCard 
-              method="POST"
-              path="/api/tasks"
-              description="Create a new task"
-              requestBody={{
-                title: "Task title",  // Required
-                description: "Task description",  // Optional
-                status: "pending"  // Optional, default: "pending"
-              }}
-              responseBody={{
-                id: 1,
-                title: "Task title",
-                description: "Task description",
-                status: "pending"
-              }}
-              curlExample={`curl -X POST \\
-  http://localhost:5000/api/tasks \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "title": "Complete project documentation",
-    "description": "Write API documentation with examples",
-    "status": "in-progress"
-  }'`}
-              errors={[
-                { status: 400, message: "Missing required field: title" },
-                { status: 500, message: "Database error" }
-              ]}
-            />
-
-            <EndpointCard 
-              method="GET"
-              path="/api/tasks"
-              description="Retrieve all tasks"
-              responseBody={[
-                {
-                  id: 1,
-                  title: "Task title 1",
-                  description: "Task description 1",
-                  status: "pending"
-                },
-                {
-                  id: 2,
-                  title: "Task title 2",
-                  description: "Task description 2", 
-                  status: "in-progress"
-                }
-              ]}
-              curlExample="curl -X GET http://localhost:5000/api/tasks"
-              errors={[
-                { status: 500, message: "Database error" }
-              ]}
-            />
-
-            <EndpointCard 
-              method="PUT"
-              path="/api/tasks/:id"
-              description="Update task"
-              requestBody={{
-                title: "Updated task title",  // Optional
-                description: "Updated description",  // Optional
-                status: "completed"  // Optional
-              }}
-              responseBody={{
-                id: 1,
-                title: "Updated task title",
-                description: "Updated description",
-                status: "completed"
-              }}
-              curlExample={`curl -X PUT \\
-  http://localhost:5000/api/tasks/1 \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "status": "completed"
-  }'`}
-              errors={[
-                { status: 404, message: "Task not found" },
-                { status: 500, message: "Database error" }
-              ]}
-            />
-
-            <EndpointCard 
-              method="DELETE"
-              path="/api/tasks/:id"
-              description="Delete a task"
-              responseBody={{
-                message: "Task deleted successfully"
-              }}
-              curlExample="curl -X DELETE http://localhost:5000/api/tasks/1"
-              errors={[
-                { status: 404, message: "Task not found" },
-                { status: 500, message: "Database error" }
-              ]}
-            />
-          </section>
-
-          {/* Database Schema section */}
-          <DatabaseSchema />
-
-          {/* API Testing section */}
-          <section id="testing" className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">API Testing</h2>
-            <ApiTester />
-          </section>
-
-          {/* Implementation section */}
-          <Implementation />
-        </main>
-      </div>
+      {/* Delete Task Modal */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this task? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setIsDeleteModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteTask}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
