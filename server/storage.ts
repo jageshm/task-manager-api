@@ -1,4 +1,4 @@
-import { tasks1 as tasks, type Task, type InsertTask, type UpdateTask } from "@shared/schema";
+import { tasks1 as tasks, users, type Task, type InsertTask, type UpdateTask, type User, type InsertUser } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
@@ -8,9 +8,9 @@ export interface IStorage {
   getTask(id: number, userId: number): Promise<Task | undefined>;
   updateTask(id: number, task: UpdateTask, userId: number): Promise<Task | undefined>;
   deleteTask(id: number, userId: number): Promise<boolean>;
-  getUser(id: number): Promise<any | undefined>;
-  getUserByUsername(username: string): Promise<any | undefined>;
-  createUser(user: any): Promise<any>;
+  getUser(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -49,20 +49,19 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
-  // Placeholder functions -  These need full implementation for authentication
-  async getUser(id: number): Promise<any | undefined> {
-    // Implement fetching user by ID from Supabase
-    return undefined;
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
-  async getUserByUsername(username: string): Promise<any | undefined> {
-    // Implement fetching user by username from Supabase
-    return undefined;
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
   }
 
-  async createUser(user: any): Promise<any> {
-    // Implement creating a user in Supabase
-    return { id: 1, ...user };
+  async createUser(userData: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(userData).returning();
+    return user;
   }
 }
 
