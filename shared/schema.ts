@@ -11,16 +11,18 @@ export const users = pgTable("users", {
 });
 
 // Add user_id to tasks
-export const tasks = pgTable("tasks", {
+export const tasks1 = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
   status: text("status").default("pending"),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
 });
 
 // Add the tasks table
-export const tasks = pgTable("tasks", {
+export const tasks2 = pgTable("tasks", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description"),
