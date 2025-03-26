@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Dashboard from "@/pages/Dashboard";
 import ApiDocs from "@/pages/ApiDocs";
+import { Auth } from './components/Auth'; // Added import for Auth component
 
 function Router() {
   return (
@@ -19,6 +20,12 @@ function Router() {
 }
 
 function App() {
+  const token = localStorage.getItem('token');
+
+  if (!token) {
+    return <Auth />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <Router />
