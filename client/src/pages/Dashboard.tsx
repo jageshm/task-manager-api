@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const { logoutMutation, user } = useAuth();
   const queryClient = useQueryClient();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState("all");
@@ -249,6 +250,33 @@ export default function Dashboard() {
               className="sm:hidden"
             >
               <Plus className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => logoutMutation.mutate()}
+              variant="outline"
+              size="sm"
+              className="hidden sm:flex text-red-600 border-red-200 hover:bg-red-50"
+              disabled={logoutMutation.isPending}
+            >
+              {logoutMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4 mr-1" />
+              )}
+              Logout
+            </Button>
+            <Button
+              onClick={() => logoutMutation.mutate()}
+              variant="outline"
+              size="icon"
+              className="sm:hidden text-red-600 border-red-200 hover:bg-red-50"
+              disabled={logoutMutation.isPending}
+            >
+              {logoutMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
