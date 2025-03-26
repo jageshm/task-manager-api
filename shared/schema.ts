@@ -29,10 +29,12 @@ export const insertUserSchema = createInsertSchema(users).pick({
 // Schemas for tasks
 export const insertTaskSchema = createInsertSchema(tasks1).omit({
   id: true,
+  userId: true,
 });
 
 export const updateTaskSchema = createInsertSchema(tasks1).partial().omit({
   id: true,
+  userId: true,
 });
 
 // Export types

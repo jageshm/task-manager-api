@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   ClipboardList, Menu, Plus, Edit, Trash, Check, X, Calendar, Clock, RefreshCw, 
-  Search, Filter, ArrowDownAZ, ArrowUpZA, Loader2
+  Search, Filter, ArrowDownAZ, ArrowUpZA, Loader2, LogOut
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Task } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Dashboard() {
   const { toast } = useToast();

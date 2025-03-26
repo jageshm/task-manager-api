@@ -19,20 +19,20 @@ export class DatabaseStorage implements IStorage {
       title: taskData.title,
       description: taskData.description,
       status: taskData.status || 'pending',
-      user_id: userId 
+      userId: userId 
     }).returning();
     return task;
   }
 
   async getAllTasks(userId: number): Promise<Task[]> {
-    return await db.select().from(tasks).where(eq(tasks.user_id, userId));
+    return await db.select().from(tasks).where(eq(tasks.userId, userId));
   }
 
   async getTask(id: number, userId: number): Promise<Task | undefined> {
     const [task] = await db.select().from(tasks)
       .where(and(
         eq(tasks.id, id),
-        eq(tasks.user_id, userId)
+        eq(tasks.userId, userId)
       ));
     return task;
   }
@@ -43,7 +43,7 @@ export class DatabaseStorage implements IStorage {
       .set(taskData)
       .where(and(
         eq(tasks.id, id),
-        eq(tasks.user_id, userId)
+        eq(tasks.userId, userId)
       ))
       .returning();
 
@@ -55,7 +55,7 @@ export class DatabaseStorage implements IStorage {
       .delete(tasks)
       .where(and(
         eq(tasks.id, id),
-        eq(tasks.user_id, userId)
+        eq(tasks.userId, userId)
       ))
       .returning({ id: tasks.id });
 
