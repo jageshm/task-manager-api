@@ -1,6 +1,6 @@
 import { tasks1 as tasks, users, type Task, type InsertTask, type UpdateTask, type User, type InsertUser } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   createTask(task: InsertTask, userId: number): Promise<Task>;
@@ -15,16 +15,25 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async createTask(taskData: InsertTask, userId: number): Promise<Task> {
-    const [task] = await db.insert(tasks).values({ ...taskData, userId }).returning();
+    const [task] = await db.insert(tasks).values({ 
+      title: taskData.title,
+      description: taskData.description,
+      status: taskData.status || 'pending',
+      user_id: userId 
+    }).returning();
     return task;
   }
 
   async getAllTasks(userId: number): Promise<Task[]> {
-    return await db.select().from(tasks).where(eq(tasks.userId, userId));
+    return await db.select().from(tasks).where(eq(tasks.user_id, userId));
   }
 
   async getTask(id: number, userId: number): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id)).where(eq(tasks.userId, userId));
+    const [task] = await db.select().from(tasks)
+      .where(and(
+        eq(tasks.id, id),
+        eq(tasks.user_id, userId)
+      ));
     return task;
   }
 
@@ -32,8 +41,10 @@ export class DatabaseStorage implements IStorage {
     const [task] = await db
       .update(tasks)
       .set(taskData)
-      .where(eq(tasks.id, id))
-      .where(eq(tasks.userId, userId))
+      .where(and(
+        eq(tasks.id, id),
+        eq(tasks.user_id, userId)
+      ))
       .returning();
 
     return task;
@@ -42,8 +53,10 @@ export class DatabaseStorage implements IStorage {
   async deleteTask(id: number, userId: number): Promise<boolean> {
     const result = await db
       .delete(tasks)
-      .where(eq(tasks.id, id))
-      .where(eq(tasks.userId, userId))
+      .where(and(
+        eq(tasks.id, id),
+        eq(tasks.user_id, userId)
+      ))
       .returning({ id: tasks.id });
 
     return result.length > 0;

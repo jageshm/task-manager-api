@@ -8,13 +8,20 @@ import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Create a new task
+  // Auth routes
   app.use('/auth', authRoutes);
   
+  // Create a new task
   app.post("/api/tasks", authMiddleware, async (req: AuthRequest, res) => {
     try {
       const taskData = insertTaskSchema.parse(req.body);
-      const task = await storage.createTask(taskData);
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const task = await storage.createTask(taskData, userId);
       res.status(201).json(task);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -29,7 +36,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all tasks
   app.get("/api/tasks", authMiddleware, async (req: AuthRequest, res) => {
     try {
-      const tasks = await storage.getAllTasks(req.user.id);
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      
+      const tasks = await storage.getAllTasks(userId);
       res.status(200).json(tasks);
     } catch (error) {
       console.error("Get tasks error:", error);
@@ -38,16 +51,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a task
-  app.put("/api/tasks/:id", async (req, res) => {
+  app.put("/api/tasks/:id", authMiddleware, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid task ID" });
       }
 
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
       const taskData = updateTaskSchema.parse(req.body);
       
-      const task = await storage.updateTask(id, taskData);
+      const task = await storage.updateTask(id, taskData, userId);
       if (!task) {
         return res.status(404).json({ error: "Task not found" });
       }
@@ -64,14 +83,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a task
-  app.delete("/api/tasks/:id", async (req, res) => {
+  app.delete("/api/tasks/:id", authMiddleware, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ error: "Invalid task ID" });
       }
 
-      const success = await storage.deleteTask(id);
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      const success = await storage.deleteTask(id, userId);
       if (!success) {
         return res.status(404).json({ error: "Task not found" });
       }
