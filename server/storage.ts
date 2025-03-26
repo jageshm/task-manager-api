@@ -1,4 +1,4 @@
-import { tasks, type Task, type InsertTask, type UpdateTask } from "@shared/schema";
+import { tasks1 as tasks, type Task, type InsertTask, type UpdateTask } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
