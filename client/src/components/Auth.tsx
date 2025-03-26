@@ -42,7 +42,7 @@ export function Auth() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-md p-8">
-        <h1 className="text-2xl font-bold">{isLogin ? 'Login' : 'Sign Up'}</h1>
+        <h1 className="text-2xl font-bold">{isLogin ? 'Login' : 'Register'}</h1>
         <input
           type="email"
           placeholder="Email"
