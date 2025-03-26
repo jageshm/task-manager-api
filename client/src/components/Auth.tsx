@@ -27,9 +27,10 @@ export function Auth() {
         });
         window.location.reload();
       } else {
-        throw new Error(data.error);
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Authentication failed');
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message,
