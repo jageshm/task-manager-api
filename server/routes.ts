@@ -27,9 +27,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all tasks
-  app.get("/api/tasks", async (_req, res) => {
+  app.get("/api/tasks", authMiddleware, async (req: AuthRequest, res) => {
     try {
-      const tasks = await storage.getAllTasks();
+      const tasks = await storage.getAllTasks(req.user.id);
       res.status(200).json(tasks);
     } catch (error) {
       console.error("Get tasks error:", error);
