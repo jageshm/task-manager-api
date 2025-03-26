@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { authMiddleware, type AuthRequest } from "./middleware/auth";
+import authRoutes from "./routes/auth";
 import { storage } from "./storage";
 import { insertTaskSchema, updateTaskSchema } from "@shared/schema";
 import { ZodError } from "zod";
@@ -7,7 +9,9 @@ import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new task
-  app.post("/api/tasks", async (req, res) => {
+  app.use('/auth', authRoutes);
+  
+  app.post("/api/tasks", authMiddleware, async (req: AuthRequest, res) => {
     try {
       const taskData = insertTaskSchema.parse(req.body);
       const task = await storage.createTask(taskData);

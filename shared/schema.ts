@@ -5,8 +5,18 @@ import { z } from "zod";
 // Keep the existing users table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Add user_id to tasks
+export const tasks = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").default("pending"),
+  userId: integer("user_id").references(() => users.id).notNull(),
 });
 
 // Add the tasks table
